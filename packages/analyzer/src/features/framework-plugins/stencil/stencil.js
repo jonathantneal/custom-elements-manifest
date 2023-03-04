@@ -48,7 +48,23 @@ export function stencilPlugin() {
 
               return { field: member?.name?.getText(), as: eventName || member?.name?.getText() }
             });
+
+          /**
+           * Collect fields with `@State()` decorator so we can process them in `moduleLinkPhase`
+           */
+          const stateFields = node?.members
+            ?.filter(member => member?.decorators?.find(decorator('State')))
+            ?.map(member => {
+              const eventDecorator = member?.decorators?.find(decorator('State'));
+              const stateName = eventDecorator?.expression?.arguments?.[0]?.properties?.find(prop => {
+                return prop?.name?.getText() === 'stateName'
+              })?.initializer?.text;
+
+              return { field: member?.name?.getText(), as: stateName || member?.name?.getText() }
+            });
+
           events = [...(eventFields || [])];
+          states = [...(stateFields || [])];
 
           /**
            * Handle `@Prop` decorator, and store attributes to add to manifest later
@@ -118,10 +134,16 @@ export function stencilPlugin() {
         /* Add events as eventDocs */
         klass.events = [...(klass?.events || []), ...eventsAsFields]
 
-        /* Remove events as class fields */
-        klass.members = klass?.members?.filter(member => !events.some(event => event.field === member.name || event.as === member.name));
+        /* Remove events and states as class fields */
+        klass.members = klass?.members?.filter(
+          member => (
+            !(
+              events.some(event => event.field === member.name || event.as === member.name) ||
+              states.some(state => state.field === member.name || state.as === member.name)
+            )
+          )
+        );
       });
-
     }
   }
 }
